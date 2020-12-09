@@ -171,7 +171,9 @@
     }
     pickerController.allowsEditing = allowsEditing;
 
-    [self.viewController presentViewController:pickerController animated:YES completion:nil];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.viewController presentViewController:pickerController animated:YES completion:nil];
+    });
 }
 
 - (void)pickContact:(CDVInvokedUrlCommand *)command
@@ -597,7 +599,7 @@
     // NSLog(@"addressBook access: %lu", status);
     ABAddressBookRequestAccessWithCompletion(addressBook, ^(bool granted, CFErrorRef error) {
             // callback can occur in background, address book must be accessed on thread it was created on
-            dispatch_sync(dispatch_get_main_queue(), ^{
+            dispatch_block_t onMain = ^{
                 if (error) {
                     workerBlock(NULL, [[CDVAddressBookAccessError alloc] initWithCode:UNKNOWN_ERROR]);
                 } else if (!granted) {
@@ -606,7 +608,14 @@
                     // access granted
                     workerBlock(addressBook, [[CDVAddressBookAccessError alloc] initWithCode:UNKNOWN_ERROR]);
                 }
-            });
+            };
+
+            if ([NSThread isMainThread]) {
+                onMain();
+            } else {
+                // callback can occur in background, address book must be accessed on thread it was created on
+                dispatch_sync(dispatch_get_main_queue(), onMain);
+            }
         });
 }
 
